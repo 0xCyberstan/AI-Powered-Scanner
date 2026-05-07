@@ -68,7 +68,6 @@ pip install requests python-dotenv libclang
 ├── django_scan.py      # Django ORM logic-flaw scanner
 ├── cpython_scan.py     # CPython C-source memory/refcount scanner
 ├── README.md
-├── LICENSE
 └── .env.example        # template for GEMINI_API_KEY
 ```
 
