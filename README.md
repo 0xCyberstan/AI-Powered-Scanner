@@ -38,38 +38,37 @@ Other shared engineering:
 - Resumable runs — both scanners persist progress incrementally and can resume from a partial output file.
 - `--show-prompts` flag inspects generated prompts without making API calls (useful for prompt iteration and cost estimation).
 
-## Usage
+## Installation
 
-```bash
-# Django scanner (two-stage)
-python django_scan.py scan /path/to/project -o initial.json
-python django_scan.py triage initial.json /path/to/project -o triaged.json
+    pip install -r requirements.txt
 
-# CPython scanner
-python cpython_scan.py /path/to/source -o audit.json
-python cpython_scan.py /path/to/source -o audit.json --resume   # skip already-audited functions
-```
-
-Set `GEMINI_API_KEY` in a `.env` file (see `.env.example`).
-
-## Dependencies
+Requirements:
 
 - `requests`, `python-dotenv`
 - `libclang` Python bindings (CPython scanner only; requires system LLVM ≥ 18)
 
-```bash
-pip install requests python-dotenv libclang
-```
+Copy `src/.env.example` to `src/.env` and set your `GEMINI_API_KEY`.
+
+## Usage
+
+    # Django scanner (two-stage)
+    python src/django_scan.py scan /path/to/project -o initial.json
+    python src/django_scan.py triage initial.json /path/to/project -o triaged.json
+
+    # CPython scanner
+    python src/cpython_scan.py /path/to/source -o audit.json
+    python src/cpython_scan.py /path/to/source -o audit.json --resume
 
 ## Repository structure
 
-```
-.
-├── django_scan.py      # Django ORM logic-flaw scanner
-├── cpython_scan.py     # CPython C-source memory/refcount scanner
-├── README.md
-└── .env.example        # template for GEMINI_API_KEY
-```
+    .
+    ├── src/
+    │   ├── django_scan.py      # Django ORM logic-flaw scanner
+    │   ├── cpython_scan.py     # CPython C-source memory/refcount scanner
+    │   └── .env.example        # template for GEMINI_API_KEY
+    ├── requirements.txt
+    ├── LICENSE
+    └── README.md
 
 ## License
 
