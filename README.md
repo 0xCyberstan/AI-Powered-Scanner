@@ -18,18 +18,29 @@ Targets logic-based SQL injection arising from state contamination in ORM intern
 Targets reference-counting bugs, use-after-free, GIL violations, GC protocol violations, and `tp_dealloc` re-entrancy in C code. Uses libclang for AST extraction.
 
 - **Symbolic layer:** pointer lifecycle tracking (alloc/free/deref events with canonical expression matching), stop-the-world vs. GIL-release region detection (hybrid AST + comment-stripped line scan to handle macro expansion), weak-reference and exception-masking detection, free-threaded (`Py_GIL_DISABLED`) divergence detection.
-- **Neural layer:** Gemini 2.5 Pro reasons over assembled structural evidence with a hardcoded reference-ownership ground-truth table covering ~60 CPython C-API functions (`NEW_REF` / `BORROWED` / `STEALS_ARGn` semantics).
+- **Neural layer:** Gemini 2.5 Pro for both Scout and Judge stages. C code is denser and more semantically loaded per function than Python, so the cheaper Flash model is insufficient for the symbolic-evidence reasoning the CPython scanner depends on. The Scout/Judge separation is preserved structurally; only the model assignment differs from the Django scanner.
+- Reference-ownership ground-truth table covering ~60 CPython C-API functions (`NEW_REF` / `BORROWED` / `STEALS_ARGn` semantics) is injected into both Scout and Judge prompts.
 - **BFS structural gate** discards findings with no path to a public entry, suppressing internal-only false positives before the expensive LLM call.
 - UAF candidates are partitioned by synchronisation context so refcount operations protected by `_PyEval_StopTheWorld` are not flagged.
 
+### `depth_ablation.py` — Stage 2 BFS depth ablation harness
+
+Standalone script that loads a cached Django call graph and measures the maximum recoverable path depth for the production reverse BFS (see dissertation §4.2.3 and Appendix B).
+
+- Tests `D ∈ {2, 4, 6, 8, 10, 12, 16, 20}` against 31 candidate sinks spanning Django's ORM query-compilation pipeline.
+- Uses a variant `bfs_longest_path` that returns the *longest* path rather than the shortest, since the production system minimises hop count for direct exploitation routes whereas the ablation needs the structural ceiling.
+- Public-entry termination is deliberately omitted so the result reflects the structural ceiling on recoverable depth rather than the production system's exploit-path constraint.
+- Per-path (not global) cycle detection, since a global visited set would block alternative-path exploration and underestimate the true maximum.
+- Prerequisite: run `python src/django_scan.py triage` first to produce `django_framework_scan.cache`.
+
 ## Architecture notes
 
-Both scanners share the same Scout/Judge separation:
+Both production scanners share the same Scout/Judge separation:
 
-- **Scout** runs the cheaper model over every function-level AST node for broad detection.
-- **Judge** runs the higher-reasoning model only on Scout findings, with structural context (call paths, taint flow, lifecycle events) assembled deterministically and injected into the prompt.
+- **Scout** runs first over every function-level AST node for broad detection.
+- **Judge** runs only on Scout findings, with structural context (call paths, taint flow, lifecycle events) assembled deterministically and injected into the prompt.
 
-The reasoning core is reused across both languages; only the graph ingestion layer differs (Python `ast` module vs. libclang).
+The reasoning core is reused across both languages; only the graph ingestion layer differs (Python `ast` module vs. libclang). The Django scanner cascades Flash (Scout) into Pro (Judge); the CPython scanner uses Pro at both stages for the reason given above.
 
 Other shared engineering:
 
@@ -59,13 +70,17 @@ Copy `src/.env.example` to `src/.env` and set your `GEMINI_API_KEY`.
     python src/cpython_scan.py /path/to/source -o audit.json
     python src/cpython_scan.py /path/to/source -o audit.json --resume
 
+    # Depth ablation (run after `django_scan.py triage` has produced the cache file)
+    python src/depth_ablation.py
+
 ## Repository structure
 
     .
     ├── src/
-    │   ├── django_scan.py      # Django ORM logic-flaw scanner
-    │   ├── cpython_scan.py     # CPython C-source memory/refcount scanner
-    │   └── .env.example        # template for GEMINI_API_KEY
+    │   ├── django_scan.py        # Django ORM logic-flaw scanner
+    │   ├── cpython_scan.py       # CPython C-source memory/refcount scanner
+    │   ├── depth_ablation.py     # Stage 2 BFS depth ablation harness (Appendix B)
+    │   └── .env.example          # template for GEMINI_API_KEY
     ├── requirements.txt
     ├── LICENSE
     └── README.md
