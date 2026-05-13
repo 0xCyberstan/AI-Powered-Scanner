@@ -18,8 +18,7 @@ Targets logic-based SQL injection arising from state contamination in ORM intern
 Targets reference-counting bugs, use-after-free, GIL violations, GC protocol violations, and `tp_dealloc` re-entrancy in C code. Uses libclang for AST extraction.
 
 - **Symbolic layer:** pointer lifecycle tracking (alloc/free/deref events with canonical expression matching), stop-the-world vs. GIL-release region detection (hybrid AST + comment-stripped line scan to handle macro expansion), weak-reference and exception-masking detection, free-threaded (`Py_GIL_DISABLED`) divergence detection.
-- **Neural layer:** Gemini 2.5 Pro for both Scout and Judge stages. C code is denser and more semantically loaded per function than Python, so the cheaper Flash model is insufficient for the symbolic-evidence reasoning the CPython scanner depends on. The Scout/Judge separation is preserved structurally; only the model assignment differs from the Django scanner.
-- Reference-ownership ground-truth table covering ~60 CPython C-API functions (`NEW_REF` / `BORROWED` / `STEALS_ARGn` semantics) is injected into both Scout and Judge prompts.
+- **Neural layer:** Gemini 2.5 Flash performs broad per-function Scout triage; Gemini 2.5 Pro acts as the Judge over assembled structural evidence with a hardcoded reference-ownership ground-truth table covering ~60 CPython C-API functions (`NEW_REF` / `BORROWED` / `STEALS_ARGn` semantics).
 - **BFS structural gate** discards findings with no path to a public entry, suppressing internal-only false positives before the expensive LLM call.
 - UAF candidates are partitioned by synchronisation context so refcount operations protected by `_PyEval_StopTheWorld` are not flagged.
 
@@ -37,10 +36,10 @@ Standalone script that loads a cached Django call graph and measures the maximum
 
 Both production scanners share the same Scout/Judge separation:
 
-- **Scout** runs first over every function-level AST node for broad detection.
-- **Judge** runs only on Scout findings, with structural context (call paths, taint flow, lifecycle events) assembled deterministically and injected into the prompt.
+- **Scout** (Gemini 2.5 Flash) runs first over every function-level AST node for broad detection.
+- **Judge** (Gemini 2.5 Pro) runs only on Scout findings, with structural context (call paths, taint flow, lifecycle events) assembled deterministically and injected into the prompt.
 
-The reasoning core is reused across both languages; only the graph ingestion layer differs (Python `ast` module vs. libclang). The Django scanner cascades Flash (Scout) into Pro (Judge); the CPython scanner uses Pro at both stages for the reason given above.
+The reasoning core is reused across both languages; only the graph ingestion layer differs (Python `ast` module vs. libclang).
 
 Other shared engineering:
 
