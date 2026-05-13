@@ -18,7 +18,7 @@ except ImportError:
     sys.exit(1)
 
 API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
-MODEL_SCOUT = "gemini-2.5-pro"
+SCAN_MODEL = "gemini-2.5-flash"
 MODEL_JUDGE = "gemini-2.5-pro"
 
 BATCH_SIZE_SCOUT = 10
