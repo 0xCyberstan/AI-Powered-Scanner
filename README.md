@@ -69,10 +69,16 @@ Copy `src/.env.example` to `src/.env` and set your `GEMINI_API_KEY`.
     python src/cpython_scan.py /path/to/source -o audit.json
     python src/cpython_scan.py /path/to/source -o audit.json --resume
 
-    # Depth ablation (run after `django_scan.py triage` has produced the cache file).
-    # The cache is written next to the triage `-o` output, so pass `--cache` if it
-    # isn't in the current directory.
-    python src/depth_ablation.py --cache /path/to/django_framework_scan.cache
+    # Depth ablation -- requires the call graph cache produced by triage.
+    # Full workflow:
+    python src/django_scan.py scan   /path/to/django -o initial.json
+    python src/django_scan.py triage initial.json /path/to/django -o triaged.json
+    python src/depth_ablation.py     --cache django_framework_scan.cache
+    #
+    # The cache is written next to the triage `-o` output, so pass an
+    # absolute --cache path if you ran triage with -o in another directory.
+    # Note: triage exits early if `initial.json` contains no findings, so the
+    # cache is only built when there is at least one finding to triage.
 
 ## Repository structure
 
