@@ -4,16 +4,16 @@ Two scanners that combine deterministic program analysis (AST parsing, call-grap
 
 ## Scanners
 
-### `django_scan.py` — Django ORM auditor
+### `django_scan.py` - Django ORM auditor
 
-Targets logic-based SQL injection arising from state contamination in ORM internals — specifically attribute injection via `**kwargs` flowing into query compilation, where public APIs accept arguments that reach internal SQL construction logic without sanitisation.
+Targets logic-based SQL injection arising from state contamination in ORM internals - specifically attribute injection via `**kwargs` flowing into query compilation, where public APIs accept arguments that reach internal SQL construction logic without sanitisation.
 
 - **Stage 1 (Scout):** Gemini 2.5 Flash performs broad per-function triage across the codebase under a constrained search space (unsafe identifier handling, ORM abstraction subversion, attribute injection via dictionary unpacking).
 - **Stage 2 (Judge):** Gemini 2.5 Pro reasons over each finding with reverse-BFS call-graph context from sink to public entry point (functions accepting `request`), plus AST-derived taint-flow summaries.
 - Schema-constrained inference via Gemini's `responseSchema` directive guarantees machine-parsable JSON output.
 - Source-fingerprinted JSON call-graph cache (SHA-256 over path/size/mtime) avoids pickle-based deserialisation risk.
 
-### `cpython_scan.py` — CPython C-source auditor
+### `cpython_scan.py` - CPython C-source auditor
 
 Targets reference-counting bugs, use-after-free, GIL violations, GC protocol violations, and `tp_dealloc` re-entrancy in C code. Uses libclang for AST extraction.
 
@@ -22,7 +22,7 @@ Targets reference-counting bugs, use-after-free, GIL violations, GC protocol vio
 - **BFS structural gate** discards findings with no path to a public entry, suppressing internal-only false positives before the expensive LLM call.
 - UAF candidates are partitioned by synchronisation context so refcount operations protected by `_PyEval_StopTheWorld` are not flagged.
 
-### `depth_ablation.py` — Stage 2 BFS depth ablation harness
+### `depth_ablation.py` - Stage 2 BFS depth ablation harness
 
 Standalone script that loads a cached Django call graph and measures the maximum recoverable path depth for the production reverse BFS (see dissertation §4.2.3 and Appendix B).
 
@@ -45,7 +45,7 @@ Other shared engineering:
 
 - Reverse BFS from sink to public entry with cycle detection, depth bounding (default 8), and global visited set.
 - Thread-pool execution with exponential backoff on 429/500/503.
-- Resumable runs — both scanners persist progress incrementally and can resume from a partial output file.
+- Resumable runs - both scanners persist progress incrementally and can resume from a partial output file.
 - `--show-prompts` flag inspects generated prompts without making API calls (useful for prompt iteration and cost estimation).
 
 ## Installation
@@ -55,7 +55,7 @@ Other shared engineering:
 Requirements:
 
 - `requests`, `python-dotenv`
-- `libclang` Python bindings (CPython scanner only; requires system LLVM ≥ 18)
+- `libclang` Python bindings (CPython scanner only). The `libclang` PyPI package bundles a compatible shared library, so no system LLVM install is required by default. To use a system libclang instead, set the `LIBCLANG_LIBRARY_FILE` environment variable to the absolute path of `libclang.so` / `libclang.dylib` / `libclang.dll` (e.g. `LIBCLANG_LIBRARY_FILE=/usr/lib/llvm-18/lib/libclang.so`).
 
 Copy `src/.env.example` to `src/.env` and set your `GEMINI_API_KEY`.
 
@@ -69,8 +69,10 @@ Copy `src/.env.example` to `src/.env` and set your `GEMINI_API_KEY`.
     python src/cpython_scan.py /path/to/source -o audit.json
     python src/cpython_scan.py /path/to/source -o audit.json --resume
 
-    # Depth ablation (run after `django_scan.py triage` has produced the cache file)
-    python src/depth_ablation.py
+    # Depth ablation (run after `django_scan.py triage` has produced the cache file).
+    # The cache is written next to the triage `-o` output, so pass `--cache` if it
+    # isn't in the current directory.
+    python src/depth_ablation.py --cache /path/to/django_framework_scan.cache
 
 ## Repository structure
 
