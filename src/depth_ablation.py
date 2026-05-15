@@ -16,11 +16,17 @@ import time
 import sys
 import ast
 import os
+import argparse
 
-sys.path.insert(0, '.')
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from django_scan import CodebaseAnalyzer
 
-cache_path = "django_framework_scan.cache"
+_parser = argparse.ArgumentParser(description="Stage 2 BFS depth ablation harness")
+_parser.add_argument("--cache", default="django_framework_scan.cache",
+                     help="Path to the call graph cache produced by django_scan.py triage")
+_args = _parser.parse_args()
+
+cache_path = _args.cache
 with open(cache_path, 'r') as f:
     cache_data = json.load(f)
 
