@@ -10,15 +10,19 @@ import concurrent.futures
 import threading
 from dotenv import load_dotenv
 
+load_dotenv()
+
 try:
     from clang.cindex import Config, Index, CursorKind
-    Config.set_library_file("/usr/lib/llvm-18/lib/libclang.so")
+    _libclang_path = os.environ.get("LIBCLANG_LIBRARY_FILE")
+    if _libclang_path:
+        Config.set_library_file(_libclang_path)
 except ImportError:
     print("Error: 'libclang' Python bindings not found. Run: pip install libclang", file=sys.stderr)
     sys.exit(1)
 
 API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
-SCAN_MODEL = "gemini-2.5-flash"
+MODEL_SCOUT = "gemini-2.5-flash"
 MODEL_JUDGE = "gemini-2.5-pro"
 
 BATCH_SIZE_SCOUT = 10
@@ -590,7 +594,7 @@ class CallGraph:
         return paths
 
 
-def generate_security_signatures(batch_nodes, api_key):
+def generate_security_signatures(batch_nodes, api_key, show_prompts=False):
     if not batch_nodes:
         return []
 
@@ -641,6 +645,16 @@ Return a JSON list ONLY -- no prose:
 
 CODE:
 {code_blocks}"""
+
+    if show_prompts:
+        print("\n" + "=" * 80)
+        print("--- SCOUT PROMPT (Flash) ---")
+        print(f"Batch of {len(batch_nodes)} functions: "
+              + ", ".join(n["name"] for n in batch_nodes))
+        print("=" * 80)
+        print(prompt)
+        print("=" * 80 + "\n")
+        return []
 
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
@@ -744,7 +758,7 @@ def _build_structural_context(node):
     return "\n".join(lines)
 
 
-def audit_function(node, node_map, call_graph, api_key):
+def audit_function(node, node_map, call_graph, api_key, show_prompts=False):
     """
     Hybrid triage:
       1. BFS structural gate: discard if no public path exists.
@@ -900,6 +914,15 @@ Return JSON ONLY. Empty findings array if the function is safe.
   ]
 }}"""
 
+    if show_prompts:
+        print("\n" + "=" * 80)
+        print("--- JUDGE PROMPT (Pro) ---")
+        print(f"File: {node['file']}, Function: {node['name']}")
+        print("=" * 80)
+        print(prompt)
+        print("=" * 80 + "\n")
+        return []
+
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
@@ -951,7 +974,6 @@ def _load_existing_findings(path):
 
 
 def main():
-    load_dotenv()
     parser = argparse.ArgumentParser(
         description="CPython C Source Auditor -- Neuro-Symbolic UAF/RefLeak Scanner"
     )
@@ -960,12 +982,17 @@ def main():
     parser.add_argument("--max-depth", type=int, default=DEFAULT_BFS_DEPTH)
     parser.add_argument("--resume", action="store_true",
                         help="Skip functions already present in --output")
+    parser.add_argument("--show-prompts", action="store_true",
+                        help="Display the generated prompts instead of sending them to the API.")
     args = parser.parse_args()
 
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        print("Error: Set GEMINI_API_KEY environment variable.", file=sys.stderr)
-        sys.exit(1)
+    if args.show_prompts:
+        api_key = os.getenv("GEMINI_API_KEY", "")
+    else:
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            print("Error: Set GEMINI_API_KEY environment variable.", file=sys.stderr)
+            sys.exit(1)
 
     print("[*] Phase 1: Parsing C source with libclang...")
 
@@ -1030,7 +1057,7 @@ def main():
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         future_to_batch = {
-            executor.submit(generate_security_signatures, b, api_key): b
+            executor.submit(generate_security_signatures, b, api_key, args.show_prompts): b
             for b in batches
         }
         for i, future in enumerate(concurrent.futures.as_completed(future_to_batch)):
@@ -1065,7 +1092,7 @@ def main():
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         future_to_node = {
-            executor.submit(audit_function, n, node_map, call_graph, api_key): n
+            executor.submit(audit_function, n, node_map, call_graph, api_key, args.show_prompts): n
             for n in nodes_to_audit
         }
         completed = 0
